@@ -14,7 +14,7 @@ import {
   REGION_BEGIN,
   REGION_END,
   SERVICE_PAGE,
-} from '../../../../scripts/gen-cordis-catalog.ts'
+} from '../../../../docker/support/scripts/gen-cordis-catalog.ts'
 
 const workspaceRoot = resolve(import.meta.dirname, '../../../..')
 

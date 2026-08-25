@@ -17,7 +17,7 @@ import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
-const buildEnvironmentModulePath = '../../../scripts/client-build-environment.ts'
+const buildEnvironmentModulePath = '../../../docker/support/scripts/client-build-environment.ts'
 const buildEnvironmentModule: unknown = await import(buildEnvironmentModulePath)
 if (typeof buildEnvironmentModule !== 'object' || buildEnvironmentModule === null) {
   throw new TypeError('client build environment module must be an object')

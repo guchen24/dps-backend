@@ -16,7 +16,10 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   return {
-    workspace: ['vendor/*', 'packages/*/*', 'apps/cli'],
+    // The native workspace root is a build coordinator, not a published
+    // TypeScript package. Its entry package remains an explicit project
+    // reference while the coordinator is excluded from tsdown's package pass.
+    workspace: ['vendor/*', 'packages/*/*', '!packages/native/landlock-run', 'apps/cli'],
     entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
     outDir: 'lib',
     format: ['esm'],

@@ -1,24 +1,13 @@
 packages:
   - vendor/*
   - packages/*/*
-  # The Landlock launcher is developed with its harness consumers but keeps
-  # its native build and publication scripts under native/landlock-run.
-  - native/landlock-run
-  - native/landlock-run/packages/*
+  # The Landlock launcher is kept inside the package tree so the public
+  # backend has one source layout while preserving the workspace package
+  # family used by sandbox-local.
+  - packages/native/landlock-run
+  - packages/native/landlock-run/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
-  - website
-  # The runnable demo leaves join as ONE workspace member: examples/package.json
-  # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
-  # plain-node (`:lib`) boot of any leaf (examples/<leaf>/cordis.yml) resolves its
-  # plugins through real package `exports`→lib by walking up to examples/node_modules.
-  # Members for DEPENDENCY RESOLUTION only — NOT build targets: tsdown's explicit
-  # globs (vendor/*, packages/*/*) exclude them. See examples/AGENTS.md and the archived
-  # run-ci-examples-from-built-lib Agent Note.
-  - examples
-  # Deploy root of the single-exe build: a pure dependency manifest whose
-  # closure is what the exe bundles and what the Python runtime distributes.
-  - python/sdk-runtime
 
 # Vendored framework packages keep their upstream semver ranges, while local
 # builds must resolve those matching names to this workspace's pinned sources.
@@ -69,4 +58,4 @@ minimumReleaseAgeExclude:
   - node-addon-require-builtin@0.1.4
 
 patchedDependencies:
-  node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch
+  node-pty@1.2.0-beta.15: docker/support/patches/node-pty@1.2.0-beta.15.patch

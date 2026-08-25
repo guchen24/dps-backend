@@ -80,7 +80,7 @@ describe.skipIf(!packable)('sandbox-local: packed-tarball distribution (publish-
     workDir = mkdtempSync(join(tmpdir(), 'dsh-packed-work-'))
 
     const nativePackDest = join(packDest, 'native')
-    const nativePack = spawnSync('node', ['./scripts/pack-release.mjs', nativePackDest, '--current-platform-only'], {
+    const nativePack = spawnSync('node', ['./docker/support/scripts/pack-release.mjs', nativePackDest, '--current-platform-only'], {
       cwd: nativeDir,
       encoding: 'utf8',
       timeout: 120_000,

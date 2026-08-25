@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { clientBuildEnvironmentDefines } from '../../docker/support/scripts/client-build-environment.ts'
 
 const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
 const STANDALONE_ERROR = 'apps/web is not a standalone application: bare Vite cannot inject window.__DSH_BOOT__. '
@@ -150,7 +150,7 @@ export default defineConfig({
     // and splits hook and element identity. Entries are package ids — they cover
     // react/jsx-runtime and react-dom/client — and resolve from this package's
     // node_modules, so react must stay a devDependency here and any watcher must
-    // run vite from this directory (scripts/dev-web.ts). Workspace packages need
+    // run vite from this directory (docker/support/scripts/dev-web.ts). Workspace packages need
     // no entry: pnpm links each of them to a single directory.
     dedupe: ['react', 'react-dom'],
     // Workspace packages are consumed as built lib products: each resolves

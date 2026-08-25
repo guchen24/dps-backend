@@ -4,6 +4,17 @@ DeepSeek Harness 的 Host、Web UI 构建链和 Docker 后端部署仓库。由�
 `dsh web` 需要从同一个 pnpm workspace 组装 Host、Typert、Client 和 Vite
 产物，本仓库保留官方 Harness 的源码布局。
 
+## 仓库目录
+
+```text
+apps/      CLI 和 Web UI 入口
+packages/  Host、Client、Typert 及运行时包
+vendor/    供应的运行时依赖
+docker/    Dockerfile、Compose 和部署辅助脚本
+```
+
+后端构建和本机 Docker 部署只需要以上四个源码目录。
+
 ## Docker 部署
 
 ```powershell
@@ -28,7 +39,7 @@ pnpm test
 pnpm dsh web --no-open
 ```
 
-`backend/` 提供源码开发入口，`docker/` 是唯一支持的本机 Docker 部署入口。
+`docker/` 是唯一支持的本机 Docker 部署入口。
 
 ## 上游
 

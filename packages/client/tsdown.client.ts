@@ -17,7 +17,7 @@ import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
-import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { clientBuildEnvironmentDefines } from '../../docker/support/scripts/client-build-environment.ts'
 
 /**
  * Virtual-id wrapper keeping module CSS away from tsdown's own css pipeline

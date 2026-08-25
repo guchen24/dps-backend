@@ -1,12 +1,12 @@
 /**
- * Negative-path tests for the exported-API JSDoc gate (`scripts/verify-export-jsdoc.ts`).
+ * Negative-path tests for the exported-API JSDoc gate (`docker/support/scripts/verify-export-jsdoc.ts`).
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { collectExportJsdocViolations } from '../../../../scripts/verify-export-jsdoc.ts'
+import { collectExportJsdocViolations } from '../../../../docker/support/scripts/verify-export-jsdoc.ts'
 
 const roots: string[] = []
 

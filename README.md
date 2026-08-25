@@ -4,6 +4,18 @@ DeepSeek Harness Host, Web UI build, and Docker deployment for the dps local
 product. This repository keeps the official Harness workspace layout because
 `dsh web` assembles Host, Typert, Client, and Vite artifacts from one build.
 
+## Repository layout
+
+```text
+apps/      CLI and Web UI entrypoints
+packages/  Host, Client, Typert, and runtime packages
+vendor/    vendored runtime dependencies
+docker/    Dockerfile, Compose file, and deployment helpers
+```
+
+Only these four source directories are needed for the backend build and local
+Docker deployment.
+
 ## Docker deployment
 
 ```powershell
@@ -28,8 +40,7 @@ pnpm test
 pnpm dsh web --no-open
 ```
 
-The `backend/` directory contains the source-development entry scripts. The
-`docker/` directory contains the only supported local Docker deployment.
+The `docker/` directory contains the only supported local Docker deployment.
 
 ## Upstream
 

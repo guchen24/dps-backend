@@ -28,7 +28,7 @@
 
 ## 生成的 client 槽目录
 
-`src/client-catalog.ts` 描述浏览器半的座位，由 `scripts/gen-client-catalog.ts` 生成（新鲜度门禁为 `doc-sync` 中的 `pnpm run verify-client-catalog`），数据来自对每一处 `SlotMap` 声明合并与每一个 `slots.register` 调用点的词法扫描。它承载浏览器半唯一能动的那个面——槽键、每个 register 调用的选项、组件会收到的 props、谁已经占着这个座位、以及哪个 owner 挂着这个座位才存在——并且只以纯数据承载：本包始终在 host 侧、不 import 任何 client 模块，跨越两平面的只有这些字符串。生成器宁可高声失败也不吐出一条模型无法照做的条目：槽缺少面向 registrant 的 JSDoc 正文、`kind`／`scope` 不是字面量、owner props 没有任何导出声明、键重复、或注册进了没人声明的槽，都会让门禁变红。owner props 只展开一层——owner 声明本身连它的成员文档,加上其字段所引用的那些形状的名字——而单个槽的整份报告有行数上限:收窄到一个槽的意义是少花上下文,不是多花。
+`src/client-catalog.ts` 描述浏览器半的座位，由 `docker/support/scripts/gen-client-catalog.ts` 生成（新鲜度门禁为 `doc-sync` 中的 `pnpm run verify-client-catalog`），数据来自对每一处 `SlotMap` 声明合并与每一个 `slots.register` 调用点的词法扫描。它承载浏览器半唯一能动的那个面——槽键、每个 register 调用的选项、组件会收到的 props、谁已经占着这个座位、以及哪个 owner 挂着这个座位才存在——并且只以纯数据承载：本包始终在 host 侧、不 import 任何 client 模块，跨越两平面的只有这些字符串。生成器宁可高声失败也不吐出一条模型无法照做的条目：槽缺少面向 registrant 的 JSDoc 正文、`kind`／`scope` 不是字面量、owner props 没有任何导出声明、键重复、或注册进了没人声明的槽，都会让门禁变红。owner props 只展开一层——owner 声明本身连它的成员文档,加上其字段所引用的那些形状的名字——而单个槽的整份报告有行数上限:收窄到一个槽的意义是少花上下文,不是多花。
 
 一个槽的教学文案就是它声明处的 JSDoc，所以要改模型读到的内容，改的是声明它的那个包里的约定，而不是这份目录。
 

@@ -1,5 +1,5 @@
 /**
- * Guarantee tests for the tool-schema catalog generator (`scripts/gen-tool-catalog.ts`).
+ * Guarantee tests for the tool-schema catalog generator (`docker/support/scripts/gen-tool-catalog.ts`).
  */
 
 import { describe, expect, it } from 'vitest'
@@ -10,7 +10,7 @@ import {
   render,
   type ToolCatalog,
   type ToolPackage,
-} from '../../../../scripts/gen-tool-catalog.ts'
+} from '../../../../docker/support/scripts/gen-tool-catalog.ts'
 
 /** JSON Schema shape enough to reach the values AST extraction can't. */
 interface JsonSchema {

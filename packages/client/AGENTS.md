@@ -56,7 +56,7 @@ Non-negotiables across the layers:
 
 ## Dependency declaration
 
-Npm sections describe installation and development relationships; each build face independently decides what its artifact contains. [`verify-client-packages`](../../scripts/verify-client-packages.ts) checks the client-specific rules and can repair unambiguous manifest drift with `--fix`.
+Npm sections describe installation and development relationships; each build face independently decides what its artifact contains. [`verify-client-packages`](../../docker/support/scripts/verify-client-packages.ts) checks the client-specific rules and can repair unambiguous manifest drift with `--fix`.
 
 1. **Every client package keeps Cordis in matching `peerDependencies` and `devDependencies`.** This includes the static packages because their Node face participates in the same Cordis plugin contract.
 2. **A dynamic package declares internal dynamic relationships as peer plus dev.** Production source imports, re-exports, module augmentations, and type-only references to an `@deepseek-ai/dsh-*` package count, as does a package named by `dsh.client.inject`. A test-only internal dependency stays dev-only.
@@ -78,7 +78,7 @@ A dynamic browser half either carries a module privately or requests the shared 
 2. **`dsh.client.external` adds a package-specific request.** Use it only for a non-baseline value import whose dynamic row must be materialized through the module table. Declare the exact import specifier; only a trailing `/client` aliases the package row.
 3. **Silence means a private copy.** Ordinary third-party implementation libraries may be bundled independently. A value reached only through `import type` is erased and creates no request.
 4. **A request has two possible suppliers.** A dynamic package supplies its own row; `PLATFORM_MODULES` supplies an exact static-table key. There is no `dsh.client.provide` alias protocol.
-5. **Validate both sides.** The dynamic build preset externalizes the baseline and rejects undeclared workspace value imports; [`verify-client-packages`](../../scripts/verify-client-packages.ts) rejects malformed or redundant requests, missing suppliers, and synchronous request cycles.
+5. **Validate both sides.** The dynamic build preset externalizes the baseline and rejects undeclared workspace value imports; [`verify-client-packages`](../../docker/support/scripts/verify-client-packages.ts) rejects malformed or redundant requests, missing suppliers, and synchronous request cycles.
 
 ### The module graph sits below cordis DI
 
@@ -104,7 +104,7 @@ The seam is `loader.internal = modules`: cordis reaches plugin code through `Ent
 
 ## Directory regime (plugin packages)
 
-One UI feature = one plugin package (`src/client/` browser half). A multi-domain package splits where its code could later become separate packages — ui-conversation is the example: `contract/` (the only shared API), domain directories that never import a sibling domain, and `apply.ts` as the single cross-domain assembly point; `scripts/verify-client-domain-graph.ts` enforces the levels. Registration goes through `slots.register` in `apply` — never module-level side effects.
+One UI feature = one plugin package (`src/client/` browser half). A multi-domain package splits where its code could later become separate packages — ui-conversation is the example: `contract/` (the only shared API), domain directories that never import a sibling domain, and `apply.ts` as the single cross-domain assembly point; `docker/support/scripts/verify-client-domain-graph.ts` enforces the levels. Registration goes through `slots.register` in `apply` — never module-level side effects.
 
 ## Styling
 
