@@ -1,0 +1,13 @@
+# Docker deployment overlay.
+#
+# The official Web profile defaults to 127.0.0.1, which is intentionally safe
+# for direct host execution. A container needs to bind its own network
+# interface for Docker's loopback-only host publication to reach it. The
+# compose file still exposes 3080 exclusively as 127.0.0.1:3080 on the host.
+#
+# This deployment shape was informed by the community reference repository
+# runzhliu/deepseek-harness-docker at 42c44a9c618ccb121e2f836856e05922b2633474.
+- id: webserver
+  config:
+    host: '0.0.0.0'
+    port: !!js ctx.webStartup.port ?? 3080

@@ -1,0 +1,44 @@
+name: deepseek-harness-desktop-main
+
+services:
+  harness:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: dps-harness:0.1.1-rc.2
+    container_name: dsh-harness-backend
+    env_file:
+      - .env
+    environment:
+      DSH_HOME: /home/dsh/.dsh
+      DSH_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:${DSH_PORT:-3080}:3080"
+    volumes:
+      - dps-dsh-home:/home/dsh/.dsh
+      - ${DSH_WORKSPACE:-../workspace}:/workspace
+    mem_limit: 2g
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+    shm_size: 1gb
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl --fail --silent http://127.0.0.1:3080/ > /dev/null"
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+volumes:
+  # Retains the already verified Harness home volume. The older dsh-data
+  # volume is deliberately left untouched rather than mounted or migrated.
+  dps-dsh-home:
+    name: dps-dsh-home
