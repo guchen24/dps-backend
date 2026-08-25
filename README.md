@@ -36,7 +36,6 @@ https://github.com/guchen24/dps-frontend
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm run typecheck
-pnpm test
 pnpm dsh web --no-open
 ```
 
@@ -45,8 +44,8 @@ The `docker/` directory contains the only supported local Docker deployment.
 ## Upstream
 
 This is a dps overlay over the MIT-licensed
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). See
-[`UPSTREAMS.md`](UPSTREAMS.md) for the pinned baseline and upgrade policy.
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), pinned to
+`dsh-v0.1.1-rc.2` (`b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`).
 
 ## License
 

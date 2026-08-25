@@ -35,7 +35,6 @@ https://github.com/guchen24/dps-frontend
 pnpm install --frozen-lockfile
 pnpm run build
 pnpm run typecheck
-pnpm test
 pnpm dsh web --no-open
 ```
 
@@ -44,8 +43,8 @@ pnpm dsh web --no-open
 ## 上游
 
 本仓库基于 MIT 许可的
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 进行二开。
-上游提交和升级规则见 [`UPSTREAMS.md`](UPSTREAMS.md)。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 进行二开，
+固定基线为 `dsh-v0.1.1-rc.2`（`b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`）。
 
 ## 许可证
 
