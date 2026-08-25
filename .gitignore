@@ -1,14 +1,38 @@
 CLAUDE.local.md
+
+### Local secrets and environment files
 /.env
-/docker/.env
-/src-tauri/target/
-/src-tauri/gen/
+**/.env
+!.env.example
+!**/.env.example
+
+### Dependencies
 node_modules/
+**/node_modules/
+
+### Build output and caches
+dist/
+**/dist/
+build/
+**/build/
 lib/
+**/lib/
+target/
+**/target/
+.vite/
+**/.vite/
+.dsh-build/
+**/.dsh-build/
+coverage/
+**/coverage/
 *.tsbuildinfo
+*.log
+**/*.log
 pnpm-debug.log
 .pnpm-store/
 .cache/
+/src-tauri/target/
+/src-tauri/gen/
 examples/*/*.jsonl
 .storages/
 .sessions/
@@ -35,7 +59,6 @@ python/**/__pycache__/
 python/**/.pytest_cache/
 apps/web/dist/
 .artifacts/
-.dsh-build/
 .playwright-mcp/
 .orig
 .worktrees/
