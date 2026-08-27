@@ -1,0 +1,18 @@
+{
+  "name": "@dps/model-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "fastify": "^5.5.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@types/pg": "^8.15.5"
+  }
+}

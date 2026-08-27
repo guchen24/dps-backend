@@ -1,52 +1,19 @@
-# dps-backend
+# DPS Platform Backend
 
-DeepSeek Harness Host, Web UI build, and Docker deployment for the dps local
-product. This repository keeps the official Harness workspace layout because
-`dsh web` assembles Host, Typert, Client, and Vite artifacts from one build.
+Backend runtime for the local DPS Platform: BFF, model gateway, PostgreSQL, three isolated Harness Runtime slots and the only published Gateway port.
 
-## Repository layout
-
-```text
-apps/      CLI and Web UI entrypoints
-packages/  Host, Client, Typert, and runtime packages
-vendor/    vendored runtime dependencies
-docker/    Dockerfile, Compose file, and deployment helpers
-```
-
-Only these four source directories are needed for the backend build and local
-Docker deployment.
-
-## Docker deployment
+Build the frontend image first from the sibling `dps-frontend` repository:
 
 ```powershell
-cd docker
-Copy-Item .env.example .env
-# Edit .env and set DEEPSEEK_API_KEY.
-docker compose up -d --build
+cd "D:\Desktop\deepseek h\dps-frontend"
+docker build -t dps-platform-frontend:0.1.0 .
 ```
 
-The service is published only at `http://127.0.0.1:3080`. The API key stays in
-the ignored `docker/.env`; it is never part of the image source, Web UI, or
-desktop executable. `dps-frontend` is the companion Tauri shell:
-https://github.com/guchen24/dps-frontend
-
-## Source development
+Then copy `docker/.env.example` to `docker/.env`, preserve the private Key source, and start from this repository:
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm run build
-pnpm run typecheck
-pnpm dsh web --no-open
+cd "D:\Desktop\deepseek h\dps-backend"
+docker compose --env-file docker\.env -f docker\compose.yaml up -d --build
 ```
 
-The `docker/` directory contains the only supported local Docker deployment.
-
-## Upstream
-
-This is a dps overlay over the MIT-licensed
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), pinned to
-`dsh-v0.1.1-rc.2` (`b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`).
-
-## License
-
-[MIT](LICENSE)
+Only `127.0.0.1:3080` is published. The frontend is an internal `portal` service routed by Gateway at `/_platform/`; the BFF remains responsible for authentication and all API authorization.

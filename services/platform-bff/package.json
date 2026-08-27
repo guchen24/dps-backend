@@ -1,0 +1,23 @@
+{
+  "name": "@dps/platform-bff",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm run build && node --test dist/runtime-policy.test.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "argon2": "^0.44.0",
+    "fastify": "^5.5.0",
+    "http-proxy": "^1.18.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.15",
+    "@types/node": "^24.3.1",
+    "@types/pg": "^8.15.5"
+  }
+}

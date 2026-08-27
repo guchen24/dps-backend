@@ -1,0 +1,205 @@
+name: dps-platform
+
+x-logging: &logging
+  driver: local
+  options: { max-size: 10m, max-file: "3" }
+
+x-runtime: &runtime
+  build:
+    context: ${DSH_SOURCE_DIR:-../../deepseek-harness-desktop-main}
+    dockerfile: docker/Dockerfile
+  image: dps-harness:0.1.1-rc.2
+  env_file:
+    - ${HARNESS_ENV_FILE:-../../deepseek-harness-desktop-main/docker/.env}
+  environment:
+    DSH_HOME: /home/dsh/.dsh
+    DSH_TELEMETRY_DISABLED: "1"
+    DEEPSEEK_API_KEY: platform-managed-key
+  expose: ["3080"]
+  mem_limit: 1g
+  read_only: true
+  tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=256m"]
+  shm_size: 512mb
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 256
+  restart: unless-stopped
+  logging: *logging
+  healthcheck:
+    test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:3080/ > /dev/null"]
+    interval: 15s
+    timeout: 5s
+    retries: 8
+    start_period: 30s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dps-platform-postgres
+    environment:
+      POSTGRES_DB: dps_platform
+      POSTGRES_USER: dps_platform
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+    volumes:
+      - dps-platform-postgres:/var/lib/postgresql/data
+      - ../db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ../db/migrations/002_runtime_platform.sql:/docker-entrypoint-initdb.d/002_runtime_platform.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dps_platform -d dps_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  portal:
+    image: ${DPS_PORTAL_IMAGE:-dps-platform-frontend:0.1.0}
+    container_name: dps-platform-portal
+    expose: ["8080"]
+    read_only: true
+    tmpfs: ["/var/cache/nginx:rw,noexec,nosuid,nodev,size=16m", "/var/run:rw,noexec,nosuid,nodev,size=8m", "/tmp:rw,noexec,nosuid,nodev,size=8m"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+  model-gateway:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    image: dps-model-gateway:0.1.0
+    container_name: dps-model-gateway
+    command: ["node", "services/model-gateway/dist/index.js"]
+    env_file:
+      - ${HARNESS_ENV_FILE:-../../deepseek-harness-desktop-main/docker/.env}
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: dps_platform
+      DATABASE_USER: dps_platform
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+      DEEPSEEK_UPSTREAM_BASE_URL: ${DEEPSEEK_UPSTREAM_BASE_URL:-https://api.deepseek.com}
+    networks:
+      default:
+        aliases: [model-gateway-slot-01, model-gateway-slot-02, model-gateway-slot-03]
+    depends_on: { postgres: { condition: service_healthy } }
+    expose: ["4000"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  harness-01:
+    <<: *runtime
+    container_name: dsh-harness-01
+    environment:
+      DSH_HOME: /home/dsh/.dsh
+      DSH_TELEMETRY_DISABLED: "1"
+      DEEPSEEK_API_KEY: platform-managed-key
+      DEEPSEEK_BASE_URL: http://model-gateway-slot-01:4000/v1
+    volumes: [dps-dsh-home-01:/home/dsh/.dsh, dps-workspace-01:/workspace]
+    depends_on: { model-gateway: { condition: service_healthy } }
+
+  harness-02:
+    <<: *runtime
+    container_name: dsh-harness-02
+    environment:
+      DSH_HOME: /home/dsh/.dsh
+      DSH_TELEMETRY_DISABLED: "1"
+      DEEPSEEK_API_KEY: platform-managed-key
+      DEEPSEEK_BASE_URL: http://model-gateway-slot-02:4000/v1
+    volumes: [dps-dsh-home-02:/home/dsh/.dsh, dps-workspace-02:/workspace]
+    depends_on: { model-gateway: { condition: service_healthy } }
+
+  harness-03:
+    <<: *runtime
+    container_name: dsh-harness-03
+    environment:
+      DSH_HOME: /home/dsh/.dsh
+      DSH_TELEMETRY_DISABLED: "1"
+      DEEPSEEK_API_KEY: platform-managed-key
+      DEEPSEEK_BASE_URL: http://model-gateway-slot-03:4000/v1
+    volumes: [dps-dsh-home-03:/home/dsh/.dsh, dps-workspace-03:/workspace]
+    depends_on: { model-gateway: { condition: service_healthy } }
+
+  platform-bff:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    image: dps-platform-bff:0.2.0
+    container_name: dps-platform-bff
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: dps_platform
+      DATABASE_USER: dps_platform
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+      PLATFORM_SESSION_SECRET: ${PLATFORM_SESSION_SECRET:?Set PLATFORM_SESSION_SECRET in docker/.env}
+      PLATFORM_BOOTSTRAP_ADMIN_EMAIL: ${PLATFORM_BOOTSTRAP_ADMIN_EMAIL:?Set PLATFORM_BOOTSTRAP_ADMIN_EMAIL in docker/.env}
+      PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:?Set PLATFORM_BOOTSTRAP_ADMIN_PASSWORD in docker/.env}
+    depends_on:
+      postgres: { condition: service_healthy }
+      portal: { condition: service_healthy }
+      model-gateway: { condition: service_healthy }
+      harness-01: { condition: service_healthy }
+      harness-02: { condition: service_healthy }
+      harness-03: { condition: service_healthy }
+    expose: ["3000"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: dsh-harness-gateway
+    depends_on:
+      portal: { condition: service_healthy }
+      platform-bff: { condition: service_healthy }
+    ports: ["127.0.0.1:${DSH_PORT:-3080}:8080"]
+    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+    read_only: true
+    tmpfs: ["/var/cache/nginx:rw,noexec,nosuid,nodev,size=32m", "/var/run:rw,noexec,nosuid,nodev,size=8m", "/tmp:rw,noexec,nosuid,nodev,size=16m"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+
+volumes:
+  dps-platform-postgres: { name: dps-platform-postgres }
+  dps-dsh-home-01: { name: dps-dsh-home-01 }
+  dps-dsh-home-02: { name: dps-dsh-home-02 }
+  dps-dsh-home-03: { name: dps-dsh-home-03 }
+  dps-workspace-01: { name: dps-workspace-01 }
+  dps-workspace-02: { name: dps-workspace-02 }
+  dps-workspace-03: { name: dps-workspace-03 }
