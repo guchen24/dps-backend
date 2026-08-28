@@ -243,6 +243,32 @@ await app.register(cookie)
 
 app.get('/healthz', async () => { await pool.query('SELECT 1'); return { status: 'ok' } })
 
+// Injected by Gateway into the Harness HTML shell. It keeps an expired platform
+// session from surfacing as a confusing internal Harness transport error.
+app.get('/dps-session-guard.js', async (_request, reply) => reply
+  .header('cache-control', 'no-store')
+  .type('application/javascript; charset=utf-8')
+  .send(`(() => {
+  let redirecting = false;
+  const login = () => {
+    if (redirecting || location.pathname.startsWith('/_platform/')) return;
+    redirecting = true;
+    const returnTo = location.pathname + location.search + location.hash;
+    location.replace('/_platform/login?returnTo=' + encodeURIComponent(returnTo));
+  };
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const response = await originalFetch(...args);
+    if (response.status === 401) login();
+    return response;
+  };
+  const originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (...args) {
+    this.addEventListener('loadend', () => { if (this.status === 401) login(); }, { once: true });
+    return originalSend.apply(this, args);
+  };
+})();`))
+
 app.post(`${PLATFORM_PREFIX}/api/auth/login`, async (request, reply) => {
   const body = (request.body ?? {}) as Body
   const requestedEmail = email(value(body, 'email'))
