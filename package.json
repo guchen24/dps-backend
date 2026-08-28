@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @dps/platform-bff build && pnpm --filter @dps/model-gateway build",
     "typecheck": "pnpm --filter @dps/platform-bff typecheck && pnpm --filter @dps/model-gateway typecheck",
-    "test": "pnpm --filter @dps/platform-bff test"
+    "test": "pnpm --filter @dps/platform-bff test && pnpm --filter @dps/model-gateway test"
   },
   "devDependencies": { "typescript": "^5.8.3" }
 }

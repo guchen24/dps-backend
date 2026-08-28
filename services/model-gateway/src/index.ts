@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { Readable, Transform } from 'node:stream'
 import Fastify from 'fastify'
 import { Pool } from 'pg'
+import { usageFromText } from './usage.js'
 
 const required = (name: string) => {
   const value = process.env[name]
@@ -26,21 +27,6 @@ function slotForHost(host: string | undefined): number | null {
   return match ? Number(match[1]) : null
 }
 
-function usageFromText(text: string): { input: number | null; output: number | null; total: number | null } {
-  const candidates = text.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trim())
-  for (const candidate of [...candidates].reverse()) {
-    try {
-      const usage = (JSON.parse(candidate) as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }).usage
-      if (usage) return { input: usage.prompt_tokens ?? null, output: usage.completion_tokens ?? null, total: usage.total_tokens ?? null }
-    } catch { /* stream frames may be incomplete or [DONE] */ }
-  }
-  try {
-    const usage = (JSON.parse(text) as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }).usage
-    if (usage) return { input: usage.prompt_tokens ?? null, output: usage.completion_tokens ?? null, total: usage.total_tokens ?? null }
-  } catch { /* unavailable usage remains explicit */ }
-  return { input: null, output: null, total: null }
-}
-
 app.get('/healthz', async () => { await pool.query('SELECT 1'); return { status: 'ok' } })
 
 app.all('/*', async (request, reply) => {
@@ -56,19 +42,38 @@ app.all('/*', async (request, reply) => {
   headers.set('authorization', `Bearer ${config.key}`)
   if (requestBody) headers.set('content-type', 'application/json')
   const startedAt = Date.now()
-  const upstream = await fetch(`${config.upstream}${request.url}`, { method: request.method, headers, body: requestBody })
+  const model = typeof (request.body as { model?: unknown } | undefined)?.model === 'string' ? (request.body as { model: string }).model : null
+  const recordUsage = async (statusCode: number, usage: { input: number | null; output: number | null; total: number | null }) => {
+    await pool.query(
+      `INSERT INTO model_usage_events (id, user_id, slot, model, status_code, input_tokens, output_tokens, total_tokens, duration_ms, usage_available)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [randomUUID(), binding.rows[0].user_id, slot, model, statusCode, usage.input, usage.output, usage.total, Date.now() - startedAt, usage.total !== null],
+    )
+  }
+  let upstream: Response
+  try {
+    upstream = await fetch(`${config.upstream}${request.url}`, { method: request.method, headers, body: requestBody })
+  } catch (error) {
+    await recordUsage(502, { input: null, output: null, total: null })
+    request.log.error(error, 'DeepSeek upstream request failed')
+    return reply.code(502).send({ error: '模型服务暂不可用。' })
+  }
   reply.hijack()
   reply.raw.statusCode = upstream.status
   upstream.headers.forEach((value, key) => { if (!['connection', 'transfer-encoding'].includes(key.toLowerCase())) reply.raw.setHeader(key, value) })
   const captured: Buffer[] = []
-  const capture = new Transform({ transform(chunk: Buffer, _encoding, callback) { captured.push(Buffer.from(chunk)); callback(null, chunk) } })
+  let capturedBytes = 0
+  const captureLimit = 128 * 1024
+  const capture = new Transform({ transform(chunk: Buffer, _encoding, callback) {
+    const copy = Buffer.from(chunk)
+    captured.push(copy)
+    capturedBytes += copy.length
+    while (capturedBytes > captureLimit && captured.length > 1) capturedBytes -= captured.shift()!.length
+    callback(null, chunk)
+  } })
   const finish = async () => {
     const usage = usageFromText(Buffer.concat(captured).toString('utf8'))
-    await pool.query(
-      `INSERT INTO model_usage_events (id, user_id, slot, model, status_code, input_tokens, output_tokens, total_tokens, duration_ms, usage_available)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [randomUUID(), binding.rows[0].user_id, slot, typeof (request.body as { model?: unknown } | undefined)?.model === 'string' ? (request.body as { model: string }).model : null, upstream.status, usage.input, usage.output, usage.total, Date.now() - startedAt, usage.total !== null],
-    )
+    await recordUsage(upstream.status, usage)
   }
   capture.on('finish', () => { void finish().catch(error => app.log.error(error, 'usage recording failed')) })
   if (!upstream.body) return reply.raw.end()

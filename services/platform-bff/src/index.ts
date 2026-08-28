@@ -35,6 +35,7 @@ type Role = 'platform_admin' | 'user'
 type User = { id: string; email: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; runtimeSlot: number | null }
 type SessionUser = User & { sessionId: string; tokenHash: string }
 type Body = Record<string, unknown>
+type Query = Record<string, unknown>
 
 const pool = new Pool(config.database)
 const proxy = httpProxy.createProxyServer({ ws: true, changeOrigin: false, xfwd: true })
@@ -60,6 +61,49 @@ function passwordError(password: string): string | null {
     return '密码必须包含大写、小写、数字和特殊字符。'
   }
   return null
+}
+
+function queryText(query: Query, key: string): string | null {
+  const item = query[key]
+  return typeof item === 'string' && item.trim() ? item.trim() : null
+}
+
+function queryTimestamp(query: Query, key: string): string | null {
+  const item = queryText(query, key)
+  if (!item) return null
+  const date = new Date(item)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function auditWhere(query: Query): { where: string; values: string[] } {
+  const values: string[] = []
+  const conditions: string[] = []
+  const add = (condition: string, item: string | null) => {
+    if (!item) return
+    values.push(item)
+    conditions.push(condition.replace('?', `$${values.length}`))
+  }
+  add('a.event_type = ?', queryText(query, 'eventType'))
+  add('actor.email ILIKE ?', queryText(query, 'actor') ? `%${queryText(query, 'actor')}%` : null)
+  add('a.created_at >= ?::timestamptz', queryTimestamp(query, 'from'))
+  add('a.created_at <= ?::timestamptz', queryTimestamp(query, 'to'))
+  return { where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values }
+}
+
+function usageWhere(query: Query): { where: string; values: string[] } {
+  const values: string[] = []
+  const conditions: string[] = []
+  const add = (condition: string, item: string | null) => {
+    if (!item) return
+    values.push(item)
+    conditions.push(condition.replace('?', `$${values.length}`))
+  }
+  add('u.email ILIKE ?', queryText(query, 'email') ? `%${queryText(query, 'email')}%` : null)
+  add('COALESCE(e.model, \'unknown\') ILIKE ?', queryText(query, 'model') ? `%${queryText(query, 'model')}%` : null)
+  add('e.created_at >= ?::timestamptz', queryTimestamp(query, 'from'))
+  add('e.created_at <= ?::timestamptz', queryTimestamp(query, 'to'))
+  if (!conditions.length) conditions.push("e.created_at > NOW() - INTERVAL '30 days'")
+  return { where: `WHERE ${conditions.join(' AND ')}`, values }
 }
 
 function toUser(row: Record<string, unknown>): User {
@@ -271,11 +315,17 @@ app.post(`${PLATFORM_PREFIX}/api/admin/users`, async (request, reply) => {
   if (!userEmail || !displayName || !role || passwordIssue) return reply.code(400).send({ error: passwordIssue ?? '请填写有效的名称、邮箱和角色。' })
   const id = randomUUID()
   try {
-    const available = await pool.query(`SELECT slot FROM runtime_slots WHERE slot NOT IN (SELECT slot FROM user_runtimes WHERE released_at IS NULL) LIMIT 1`)
-    if (!available.rowCount) return reply.code(409).send({ error: '没有可用运行槽位；当前平台最多支持 3 位用户。' })
+    await pool.query('BEGIN')
+    const available = await pool.query<{ slot: number }>(`SELECT slot FROM runtime_slots s WHERE NOT EXISTS (SELECT 1 FROM user_runtimes r WHERE r.slot = s.slot AND r.released_at IS NULL) ORDER BY slot LIMIT 1 FOR UPDATE`)
+    if (!available.rowCount) {
+      await pool.query('ROLLBACK')
+      return reply.code(409).send({ error: '没有可用运行槽位；当前平台最多支持 3 位用户。' })
+    }
     await pool.query(`INSERT INTO users (id, email, display_name, password_hash, role, active, must_change_password) VALUES ($1,$2,$3,$4,$5,true,true)`, [id, userEmail, displayName, await argon2.hash(initialPassword, { type: argon2.argon2id }), role])
-    if (!await assignFirstSlot(id)) throw new Error('runtime slot allocation raced; retry user creation')
+    await pool.query(`INSERT INTO user_runtimes (user_id, slot) VALUES ($1, $2)`, [id, available.rows[0].slot])
+    await pool.query('COMMIT')
   } catch (error: unknown) {
+    await pool.query('ROLLBACK').catch(() => undefined)
     if ((error as { code?: string }).code === '23505') return reply.code(409).send({ error: '该邮箱已存在。' })
     throw error
   }
@@ -294,6 +344,10 @@ app.patch(`${PLATFORM_PREFIX}/api/admin/users/:id`, async (request, reply) => {
   if (!targetResult.rowCount) return reply.code(404).send({ error: '用户不存在。' })
   const target = targetResult.rows[0] as { id: string; role: Role; active: boolean }
   if (target.id === admin.id && active === false) return reply.code(400).send({ error: '不能停用当前管理员账号。' })
+  if (active === true) {
+    const runtime = await pool.query('SELECT 1 FROM user_runtimes WHERE user_id = $1 AND released_at IS NULL', [target.id])
+    if (!runtime.rowCount) return reply.code(409).send({ error: '该用户的运行槽位已被释放；请新建账号分配空闲槽位。' })
+  }
   if (target.role === 'platform_admin' && target.active && (active === false || role === 'user')) {
     const admins = await pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM users WHERE role = 'platform_admin' AND active = true`)
     if (Number(admins.rows[0].count) <= 1) return reply.code(400).send({ error: '平台必须保留至少一个启用的管理员。' })
@@ -319,22 +373,19 @@ app.post(`${PLATFORM_PREFIX}/api/admin/users/:id/reset-password`, async (request
 
 app.get(`${PLATFORM_PREFIX}/api/admin/audit`, async (request, reply) => {
   const admin = await requireAdmin(request, reply); if (!admin) return
-  const query = request.query as { eventType?: string; actor?: string }
-  const params: string[] = []
-  const conditions: string[] = []
-  if (query.eventType) { params.push(query.eventType); conditions.push(`a.event_type = $${params.length}`) }
-  if (query.actor) { params.push(query.actor); conditions.push(`actor.email ILIKE $${params.length}`) }
+  const filters = auditWhere(request.query as Query)
   const result = await pool.query(
     `SELECT a.id, a.event_type, actor.email AS actor_email, subject.email AS subject_email, a.ip, a.created_at
      FROM audit_events a LEFT JOIN users actor ON actor.id = a.actor_id LEFT JOIN users subject ON subject.id = a.subject_id
-     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY a.created_at DESC LIMIT 500`, params,
+     ${filters.where} ORDER BY a.created_at DESC LIMIT 500`, filters.values,
   )
   return { events: result.rows.map(row => ({ id: row.id, eventType: row.event_type, actorEmail: row.actor_email, subjectEmail: row.subject_email, ip: row.ip, createdAt: new Date(row.created_at).toISOString() })) }
 })
 
 app.get(`${PLATFORM_PREFIX}/api/admin/audit.csv`, async (request, reply) => {
   const admin = await requireAdmin(request, reply); if (!admin) return
-  const result = await pool.query(`SELECT a.event_type, actor.email AS actor_email, subject.email AS subject_email, a.created_at FROM audit_events a LEFT JOIN users actor ON actor.id = a.actor_id LEFT JOIN users subject ON subject.id = a.subject_id ORDER BY a.created_at DESC LIMIT 5000`)
+  const filters = auditWhere(request.query as Query)
+  const result = await pool.query(`SELECT a.event_type, actor.email AS actor_email, subject.email AS subject_email, a.created_at FROM audit_events a LEFT JOIN users actor ON actor.id = a.actor_id LEFT JOIN users subject ON subject.id = a.subject_id ${filters.where} ORDER BY a.created_at DESC LIMIT 5000`, filters.values)
   const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
   const csv = ['time,event,actor,subject', ...result.rows.map(row => [new Date(row.created_at).toISOString(), row.event_type, row.actor_email, row.subject_email].map(quote).join(','))].join('\n')
   return reply.header('content-disposition', 'attachment; filename="dps-audit.csv"').type('text/csv; charset=utf-8').send(csv)
@@ -342,19 +393,31 @@ app.get(`${PLATFORM_PREFIX}/api/admin/audit.csv`, async (request, reply) => {
 
 app.get(`${PLATFORM_PREFIX}/api/admin/status`, async (request, reply) => {
   const admin = await requireAdmin(request, reply); if (!admin) return
-  const checks = await Promise.all(['postgres', 'portal', 'model-gateway', 'harness-01', 'harness-02', 'harness-03'].map(async service => {
+  const checks = await Promise.all(['postgres', 'portal', 'platform-bff', 'model-gateway', 'harness-01', 'harness-02', 'harness-03'].map(async service => {
+    if (service === 'platform-bff') return { service, healthy: true }
     const url = service === 'postgres' ? null : service === 'portal' ? 'http://portal:8080/healthz' : service === 'model-gateway' ? 'http://model-gateway:4000/healthz' : `http://${service}:3080/`
     if (!url) { try { await pool.query('SELECT 1'); return { service, healthy: true } } catch { return { service, healthy: false } } }
     try { const response = await fetch(url, { signal: AbortSignal.timeout(3000) }); return { service, healthy: response.ok } } catch { return { service, healthy: false } }
   }))
   const bindings = await pool.query(`SELECT r.slot, u.email FROM runtime_slots r LEFT JOIN user_runtimes ur ON ur.slot = r.slot AND ur.released_at IS NULL LEFT JOIN users u ON u.id = ur.user_id ORDER BY r.slot`)
-  return { checks, runtimes: bindings.rows.map(row => ({ slot: Number(row.slot), email: row.email ?? null })) }
+  const errors = await pool.query(`SELECT u.email, e.slot, COALESCE(e.model, 'unknown') AS model, e.status_code, e.created_at FROM model_usage_events e JOIN users u ON u.id = e.user_id WHERE e.status_code >= 400 ORDER BY e.created_at DESC LIMIT 10`)
+  return { checks, runtimes: bindings.rows.map(row => ({ slot: Number(row.slot), email: row.email ?? null })), recentErrors: errors.rows.map(row => ({ email: row.email, slot: Number(row.slot), model: row.model, statusCode: Number(row.status_code), createdAt: new Date(row.created_at).toISOString() })) }
 })
 
 app.get(`${PLATFORM_PREFIX}/api/admin/usage`, async (request, reply) => {
   const admin = await requireAdmin(request, reply); if (!admin) return
-  const result = await pool.query(`SELECT u.email, COALESCE(e.model, 'unknown') AS model, COUNT(*)::int AS requests, COALESCE(SUM(e.input_tokens), 0)::int AS input_tokens, COALESCE(SUM(e.output_tokens), 0)::int AS output_tokens, COALESCE(SUM(e.total_tokens), 0)::int AS total_tokens, BOOL_OR(e.usage_available) AS usage_available FROM model_usage_events e JOIN users u ON u.id = e.user_id WHERE e.created_at > NOW() - INTERVAL '30 days' GROUP BY u.email, e.model ORDER BY total_tokens DESC, requests DESC`)
+  const filters = usageWhere(request.query as Query)
+  const result = await pool.query(`SELECT u.email, COALESCE(e.model, 'unknown') AS model, COUNT(*)::int AS requests, COALESCE(SUM(e.input_tokens), 0)::int AS input_tokens, COALESCE(SUM(e.output_tokens), 0)::int AS output_tokens, COALESCE(SUM(e.total_tokens), 0)::int AS total_tokens, BOOL_OR(e.usage_available) AS usage_available FROM model_usage_events e JOIN users u ON u.id = e.user_id ${filters.where} GROUP BY u.email, e.model ORDER BY total_tokens DESC, requests DESC`, filters.values)
   return { items: result.rows }
+})
+
+app.get(`${PLATFORM_PREFIX}/api/admin/usage.csv`, async (request, reply) => {
+  const admin = await requireAdmin(request, reply); if (!admin) return
+  const filters = usageWhere(request.query as Query)
+  const result = await pool.query(`SELECT u.email, COALESCE(e.model, 'unknown') AS model, COUNT(*)::int AS requests, COALESCE(SUM(e.input_tokens), 0)::int AS input_tokens, COALESCE(SUM(e.output_tokens), 0)::int AS output_tokens, COALESCE(SUM(e.total_tokens), 0)::int AS total_tokens, BOOL_OR(e.usage_available) AS usage_available FROM model_usage_events e JOIN users u ON u.id = e.user_id ${filters.where} GROUP BY u.email, e.model ORDER BY total_tokens DESC, requests DESC`, filters.values)
+  const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+  const csv = ['user,model,requests,input_tokens,output_tokens,total_tokens,usage_available', ...result.rows.map(row => [row.email, row.model, row.requests, row.input_tokens, row.output_tokens, row.total_tokens, row.usage_available].map(quote).join(','))].join('\n')
+  return reply.header('content-disposition', 'attachment; filename="dps-usage.csv"').type('text/csv; charset=utf-8').send(csv)
 })
 
 app.all('/*', async (request, reply) => {

@@ -17,3 +17,7 @@ docker compose --env-file docker\.env -f docker\compose.yaml up -d --build
 ```
 
 Only `127.0.0.1:3080` is published. The frontend is an internal `portal` service routed by Gateway at `/_platform/`; the BFF remains responsible for authentication and all API authorization.
+
+For Windows, `scripts\start-platform.bat` builds the sibling Portal image, starts the stack, runs health checks for PostgreSQL, Portal, BFF, model gateway and all three Harness Runtime slots, then opens the local URL. On failure it prints Compose status and recent logs.
+
+The administrator page exposes Runtime bindings and health, recent model errors, user lifecycle actions, filtered audit records and filtered usage exports. The API key is read only by the internal model gateway; the three Harness containers receive a non-secret managed placeholder and use their fixed internal gateway aliases.
